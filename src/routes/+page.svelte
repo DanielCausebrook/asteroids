@@ -11,7 +11,7 @@
     let config: GameConfig = {
         fps: 30,
         playAreaSize: new Vector2D(100, 100),
-        pixelScale: 8,
+        pixelScale: 6,
         mousePull: 0.1,
         asteroid: {
             spawnFreq: 0.3,
