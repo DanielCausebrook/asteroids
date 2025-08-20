@@ -12,7 +12,7 @@
         fps: 30,
         playAreaSize: new Vector2D(100, 100),
         pixelScale: 6,
-        mousePull: 0.1,
+        mousePull: 6,
         asteroid: {
             spawnFreq: 0.3,
             sizeMin: 8,
@@ -26,6 +26,13 @@
             respawnTime: 2,
             invulnerabilityDuration: 2,
             invulnerabilityFlashFreq: 0.2,
+        },
+        blink: {
+            animationDuration: 0.1,
+            cooldown: 1,
+            temporaryVelocity: 15,
+            velocity: 15,
+            transitionTime: 0.3,
         },
         colors: {
             bg: '#000',

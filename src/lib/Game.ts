@@ -1,5 +1,5 @@
 import {Vector2D} from "$lib/Vector2D";
-import {PixelCanvas} from "$lib/PixelCanvas";
+import {PixelMouseEvent, PixelCanvas} from "$lib/PixelCanvas";
 import {Player} from "$lib/Player";
 import {Asteroid} from "$lib/Asteroid";
 import {delayMs} from "$lib/utils";
@@ -23,6 +23,13 @@ export type GameConfig = {
         invulnerabilityDuration: number,
         invulnerabilityFlashFreq: number,
     },
+    blink: {
+        animationDuration: number,
+        cooldown: number,
+        temporaryVelocity: number,
+        velocity: number,
+        transitionTime: number,
+    }
     colors: {
         fg: string,
         bg: string,
@@ -81,7 +88,7 @@ class GameInstance {
         this.config = config;
         this.canvas = canvas;
         this.playAreaCanvas = canvas.subCanvas(new Vector2D(1, 1), config.playAreaSize);
-        this.player = new Player(config.playAreaSize.scale(0.5));
+        this.player = new Player(config, config.playAreaSize.scale(0.5));
     }
 
     static computeCanvasSize(config: GameConfig): Vector2D {
@@ -97,6 +104,12 @@ class GameInstance {
     async run() {
         this.running = true;
 
+        let lastClick: Vector2D|null = null;
+        const clickListener = (e: PixelMouseEvent) => {
+            lastClick = e.position;
+        }
+        this.playAreaCanvas.addMouseDownListener(clickListener);
+
         let startMs = new Date().getTime();
         let lastT = 0;
         while(this.running) {
@@ -104,13 +117,16 @@ class GameInstance {
             const delta = t - lastT;
             lastT = t;
 
-            this.gameLoop(t, delta);
+            this.gameLoop(t, delta, lastClick);
+            lastClick = null;
 
             await delayMs(1000 / this.config.fps);
         }
+
+        this.playAreaCanvas.removeMouseDownListener(clickListener);
     }
 
-    gameLoop(t: number, delta: number) {
+    gameLoop(t: number, delta: number, lastClick: Vector2D|null) {
         let player = this.player;
         let playAreaSize = this.config.playAreaSize;
         let white = this.config.colors.fg;
@@ -118,34 +134,56 @@ class GameInstance {
 
         // Move player
         if (this.playerHitAt === null) {
-            let lastMousePos = this.playAreaCanvas.lastMousePos();
-            if (lastMousePos !== null) {
-                let vecToMouse = Vector2D.add(lastMousePos, player.position.negate());
-                player.velocity = Vector2D.add(player.velocity, vecToMouse.scale(this.config.mousePull));
-            }
-            player.position = Vector2D.add(player.position, player.velocity.scale(delta));
+            if (lastClick !== null && !player.blinkOnCooldown(t)) {
+                // Blink
+                player.lastBlink = {
+                    t: t,
+                    startPos: player.position,
+                    endPos: lastClick,
+                    angle: Vector2D.add(lastClick, player.position.negate()).theta(),
+                };
+                player.position = lastClick;
 
-            if (player.position.x < 0) {
-                player.position = new Vector2D(0, player.position.y);
-                if (player.velocity.x < 0) {
-                    player.velocity = new Vector2D(player.velocity.x * -0.5, player.velocity.y);
+                // player.velocity = Vector2D.add(player.velocity, Vector2D.fromPolar(10, Vector2D.add(player.position, startPos.negate()).theta()));
+                player.velocity = Vector2D.fromPolar(this.config.blink.velocity, player.lastBlink.angle);
+            } else {
+                // Normal Move
+                let blinkTransitionAmount = 0;
+                if (player.lastBlink !== null && player.lastBlink.t > t - this.config.blink.transitionTime) {
+                    blinkTransitionAmount = (t-player.lastBlink.t) / this.config.blink.transitionTime;
+                    let blinkVelocity = Vector2D.fromPolar(this.config.blink.temporaryVelocity / blinkTransitionAmount, player.lastBlink.angle);
+                    player.position = Vector2D.add(player.position, blinkVelocity.scale(delta));
                 }
-            } else if (player.position.x >= playAreaSize.x) {
-                player.position = new Vector2D(playAreaSize.x, player.position.y);
-                if (player.velocity.x > 0) {
-                    player.velocity = new Vector2D(player.velocity.x * -0.5, player.velocity.y);
-                }
-            }
 
-            if (player.position.y < 0) {
-                player.position = new Vector2D(player.position.x, 0);
-                if (player.velocity.y < 0) {
-                    player.velocity = new Vector2D(player.velocity.x, player.velocity.y * -0.5);
+                let lastMousePos = this.playAreaCanvas.lastMousePos();
+                if (lastMousePos !== null) {
+                    let vecToMouse = Vector2D.add(lastMousePos, player.position.negate());
+                    player.velocity = Vector2D.add(player.velocity, vecToMouse.scale(this.config.mousePull).scale(delta).scale(1-blinkTransitionAmount));
                 }
-            } else if (player.position.y >= playAreaSize.y) {
-                player.position = new Vector2D(player.position.x, playAreaSize.y);
-                if (player.velocity.y > 0) {
-                    player.velocity = new Vector2D(player.velocity.x, player.velocity.y * -0.5);
+                player.position = Vector2D.add(player.position, player.velocity.scale(delta));
+
+                if (player.position.x < 0) {
+                    player.position = new Vector2D(0, player.position.y);
+                    if (player.velocity.x < 0) {
+                        player.velocity = new Vector2D(player.velocity.x * -0.5, player.velocity.y);
+                    }
+                } else if (player.position.x >= playAreaSize.x) {
+                    player.position = new Vector2D(playAreaSize.x, player.position.y);
+                    if (player.velocity.x > 0) {
+                        player.velocity = new Vector2D(player.velocity.x * -0.5, player.velocity.y);
+                    }
+                }
+
+                if (player.position.y < 0) {
+                    player.position = new Vector2D(player.position.x, 0);
+                    if (player.velocity.y < 0) {
+                        player.velocity = new Vector2D(player.velocity.x, player.velocity.y * -0.5);
+                    }
+                } else if (player.position.y >= playAreaSize.y) {
+                    player.position = new Vector2D(player.position.x, playAreaSize.y);
+                    if (player.velocity.y > 0) {
+                        player.velocity = new Vector2D(player.velocity.x, player.velocity.y * -0.5);
+                    }
                 }
             }
         } else if (this.playerHitAt + this.config.playerHit.respawnTime < t) {
@@ -209,6 +247,9 @@ class GameInstance {
 
         // Rendering
         const shouldFlashBgFn = () => {
+            if (player.inBlinkAnimation(t)) {
+                return true;
+            }
             if (this.playerHitAt !== null) {
                 const timeSinceHit = t - this.playerHitAt;
 
@@ -238,7 +279,11 @@ class GameInstance {
                 player.position.x == this.config.playAreaSize.x ? this.config.playAreaSize.x - 1 : player.position.x,
                 player.position.y == this.config.playAreaSize.y ? this.config.playAreaSize.y - 1 : player.position.y,
             );
-            this.playAreaCanvas.drawPixel(playerRenderPos, white);
+            this.playAreaCanvas.drawPixel(playerRenderPos, player.inBlinkAnimation(t) ? black : white);
+        }
+
+        if (player.lastBlink !== null && player.inBlinkAnimation(t)) {
+            this.playAreaCanvas.drawLine(player.lastBlink.startPos, player.lastBlink.endPos, black);
         }
 
         this.paintHUD();

@@ -2,6 +2,14 @@ import {Vector2D} from "$lib/Vector2D";
 import numberBitmaps from "$lib/bitmaps/numbers";
 import letterBitmaps from "$lib/bitmaps/letters";
 
+export class PixelMouseEvent {
+    readonly position: Vector2D;
+
+    constructor(position: Vector2D) {
+        this.position = position;
+    }
+}
+
 export class PixelCanvas {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
@@ -10,9 +18,16 @@ export class PixelCanvas {
     readonly pixelScale: number;
     private mousePos_: Vector2D|null = null;
     private lastMousePos_: Vector2D|null = null;
+    private registeredMouseClickListeners: Set<(event: PixelMouseEvent) => void> = new Set();
+    private registeredMouseDownListeners: Set<(event: PixelMouseEvent) => void> = new Set();
+    private readonly mouseClickListener: (event: MouseEvent) => void = e => {
+        this.registeredMouseClickListeners.forEach(l => l(new PixelMouseEvent(this.fromClientPos(Vector2D.from(e.clientX, e.clientY)))));
+    };
+    private readonly mouseDownListener: (event: MouseEvent) => void = e => {
+        this.registeredMouseDownListeners.forEach(l => l(new PixelMouseEvent(this.fromClientPos(Vector2D.from(e.clientX, e.clientY)))));
+    };
     private readonly updateMousePosListener: (e: MouseEvent) => void = e => {
-        let canvasPos = this.canvas.getBoundingClientRect();
-        this.mousePos_ = this.lastMousePos_ = Vector2D.add(Vector2D.add(Vector2D.from(e.clientX, e.clientY), this.originRawPixels.negate(), Vector2D.from(-canvasPos.x, -canvasPos.y)).scale(1/this.pixelScale), Vector2D.from(-0.5, -0.5));
+        this.mousePos_ = this.lastMousePos_ = this.fromClientPos(Vector2D.from(e.clientX, e.clientY));
     }
     private readonly clearMousePosListener: (e: MouseEvent) => void = e => this.mousePos_ = null;
 
@@ -24,18 +39,30 @@ export class PixelCanvas {
             throw new Error('Could not get 2D canvas context');
         }
         this.ctx = ctx;
+        this.canvas.addEventListener('click', this.mouseClickListener);
+        this.canvas.addEventListener('mousedown', this.mouseDownListener);
         this.canvas.addEventListener('mouseenter', this.updateMousePosListener);
         this.canvas.addEventListener('mouseleave', this.clearMousePosListener);
-        this.canvas.addEventListener('mousemove', this.updateMousePosListener)
+        this.canvas.addEventListener('mousemove', this.updateMousePosListener);
         this.originRawPixels = originRawPixels;
         this.size = size;
         this.pixelScale = pixelScale;
     }
 
     destroy() {
+        this.canvas.removeEventListener('click', this.mouseClickListener);
+        this.canvas.removeEventListener('mousedown', this.mouseDownListener);
         this.canvas.removeEventListener('mouseenter', this.updateMousePosListener);
         this.canvas.removeEventListener('mouseleave', this.clearMousePosListener);
         this.canvas.removeEventListener('mousemove', this.updateMousePosListener);
+        this.registeredMouseClickListeners.clear();
+        this.registeredMouseDownListeners.clear();
+    }
+
+    private fromClientPos(pos: Vector2D): Vector2D {
+        let canvasPos = this.canvas.getBoundingClientRect();
+        return Vector2D.add(Vector2D.add(Vector2D.from(pos.x, pos.y), this.originRawPixels.negate(), Vector2D.from(-canvasPos.x, -canvasPos.y)).scale(1/this.pixelScale), Vector2D.from(-0.5, -0.5));
+
     }
 
     clear(color: string) {
@@ -164,6 +191,22 @@ export class PixelCanvas {
 
     lastMousePos(): Vector2D|null {
         return this.lastMousePos_;
+    }
+
+    addClickListener(listener: (event: PixelMouseEvent) => void) {
+        this.registeredMouseClickListeners.add(listener);
+    }
+
+    removeClickListener(listener: (event: PixelMouseEvent) => void) {
+        this.registeredMouseClickListeners.delete(listener);
+    }
+
+    addMouseDownListener(listener: (event: PixelMouseEvent) => void) {
+        this.registeredMouseDownListeners.add(listener);
+    }
+
+    removeMouseDownListener(listener: (event: PixelMouseEvent) => void) {
+        this.registeredMouseDownListeners.delete(listener);
     }
 
     subCanvas(origin: Vector2D, size: Vector2D): PixelCanvas {
