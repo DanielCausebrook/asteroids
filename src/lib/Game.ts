@@ -10,18 +10,18 @@ export type GameConfig = {
     pixelScale: number,
     mousePull: number,
     asteroid: {
-        spawnFreq: number,
+        spawnPeriod: number,
         sizeMin: number,
         sizeMax: number,
         velMin: number,
         velMax: number,
     },
     playerHit: {
-        flashFreq: number,
+        flashPeriod: number,
         flashDuration: number,
         respawnTime: number,
         invulnerabilityDuration: number,
-        invulnerabilityFlashFreq: number,
+        invulnerabilityFlashPeriod: number,
     },
     blink: {
         animationDuration: number,
@@ -202,7 +202,7 @@ class GameInstance {
             const spawnVel = Vector2D.fromPolar(this.config.asteroid.velMin + Math.random() * (this.config.asteroid.velMax - this.config.asteroid.velMin), theta + 0.75*Math.PI + 0.5*Math.PI*Math.random());
             this.asteroids.push(new Asteroid(this.config.asteroid.sizeMin + Math.random() * (this.config.asteroid.sizeMax - this.config.asteroid.sizeMin) ,spawnPos, spawnVel));
 
-            this.nextAsteroidIn += this.config.asteroid.spawnFreq;
+            this.nextAsteroidIn += this.config.asteroid.spawnPeriod;
         }
 
         // Move asteroids
@@ -253,7 +253,7 @@ class GameInstance {
             if (this.playerHitAt !== null) {
                 const timeSinceHit = t - this.playerHitAt;
 
-                if (timeSinceHit < this.config.playerHit.flashDuration && timeSinceHit % this.config.playerHit.flashFreq < 0.5*this.config.playerHit.flashFreq) {
+                if (timeSinceHit < this.config.playerHit.flashDuration && timeSinceHit % this.config.playerHit.flashPeriod < 0.5*this.config.playerHit.flashPeriod) {
                     return true;
                 }
             }
@@ -269,7 +269,7 @@ class GameInstance {
             if (this.playerHitAt !== null) {
                 return true
             }
-            if (player.invulnerable(t) && (player.invulnerabilityUntil - t) % this.config.playerHit.invulnerabilityFlashFreq < 0.5*this.config.playerHit.invulnerabilityFlashFreq) {
+            if (player.invulnerable(t) && (player.invulnerabilityUntil - t) % this.config.playerHit.invulnerabilityFlashPeriod < 0.5*this.config.playerHit.invulnerabilityFlashPeriod) {
                 return true;
             }
             return false;
